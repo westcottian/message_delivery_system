@@ -3,30 +3,92 @@ package client
 import (
 	"fmt"
 	msg "message_delivery_system/message"
+	"strings"
+	"sync"
 )
 
+type DispatcherInterface interface {
+	Dispatch(message msg.MessageInterface)
+	Subscribe(client ClientInterface)
+	Unsubscribe(client ClientInterface)
+}
+
 type Dispatcher struct {
-	name    string
-	clients map[int64]*Client
+	clients      map[int64]ClientInterface
+	clientsMutex sync.Mutex
 }
 
-func NewDispather(foo string) *Dispatcher {
-	return &Dispatcher{name: foo, clients: make(map[int64]*Client)}
+func NewDispather() *Dispatcher {
+	return &Dispatcher{clients: make(map[int64]ClientInterface)}
 }
 
-func (d *Dispatcher) Dispatch(message *msg.Message) {
-	//d.output <- "Dispatching"
+func (d *Dispatcher) Dispatch(message msg.MessageInterface) {
+	switch message.Command() {
+	case msg.MessageTypeRelay:
+		d.relay(message)
+	case msg.MessageTypeIdentity:
+		d.identify(message.Sender())
+	case msg.MessageTypeList:
+		d.list(message.Sender())
+	}
 
-	//d.output <- fmt.Sprintf("message is '%s'", message)
-	fmt.Printf("Dispatching message '%s'\n", message.Body())
-	for _, id := range message.Receivers() {
-		if receiver := d.clients[id]; receiver != nil {
-			fmt.Printf("\tto client %d\n", receiver.id)
-			receiver.Send(message.Body())
+}
+
+func (d *Dispatcher) identify(sender int64) {
+	d.sendBody(sender, fmt.Sprintf("[Server] Your ID is %d", sender))
+}
+
+func (d *Dispatcher) list(sender int64) {
+	var clientList []string
+
+	d.lockClients()
+	for id, _ := range d.clients {
+		if id != sender {
+			clientList = append(clientList, fmt.Sprintf("%d", id))
 		}
+	}
+	d.unlockClients()
+
+	d.sendBody(sender, fmt.Sprintf("[Server] Client IDs are %s", strings.Join(clientList, ", ")))
+}
+
+func (d *Dispatcher) relay(message msg.MessageInterface) {
+	for _, id := range message.Receivers() {
+		d.sendBody(id, message.Body())
 	}
 }
 
-func (d *Dispatcher) Subscribe(c *Client) {
-	d.clients[c.id] = c
+func (d *Dispatcher) Subscribe(c ClientInterface) {
+	d.lockClients()
+	d.clients[c.Id()] = c
+	d.unlockClients()
+}
+
+func (d *Dispatcher) Unsubscribe(c ClientInterface) {
+	d.lockClients()
+	delete(d.clients, c.Id())
+	d.unlockClients()
+}
+
+func (d *Dispatcher) sendBody(receiver int64, body string) {
+	client := d.client(receiver)
+
+	if client != nil {
+		client.Send(body + "\n\n")
+	}
+}
+
+func (d *Dispatcher) client(id int64) ClientInterface {
+	d.lockClients()
+	client := d.clients[id]
+	d.unlockClients()
+	return client
+}
+
+func (d *Dispatcher) lockClients() {
+	d.clientsMutex.Lock()
+}
+
+func (d *Dispatcher) unlockClients() {
+	d.clientsMutex.Unlock()
 }
