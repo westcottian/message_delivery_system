@@ -2,10 +2,12 @@ package  client
 
 import (
 	"errors"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"sync"
 	"testing"
-	"time"
+	msg "message_delivery_system/message"
 )
 
 func TestClientImplementsClientInterface(t *testing.T) {
@@ -13,76 +15,63 @@ func TestClientImplementsClientInterface(t *testing.T) {
 }
 
 func TestIdReturnsId(t *testing.T) {
-	id := int64(42)
-	conn := new(MockedConnection)
+	id := uint64(42)
+	conn := new(ClientMockedConnection)
 
-	c := newClient(id, conn)
+	c := NewClient(id, conn)
 	assert.Equal(t, id, c.Id())
 }
 
 func TestNextMessageReturnsIdentityMessage(t *testing.T) {
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 
-	conn.AddExpectedLine(MessageTypeIdentity)
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("")
+	conn.setExpectedCommand(msg.MessageTypeIdentity)
 
-	c := newClient(42, conn)
+	c := NewClient(42, conn)
 	message, _ := c.NextMessage()
 
-	assert.Equal(t, MessageTypeIdentity, message.Command())
+	assert.Equal(t, msg.MessageTypeIdentity, message.Command())
 }
 
 func TestNextMessageReturnsListMessage(t *testing.T) {
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 
-	conn.AddExpectedLine(MessageTypeList)
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("")
+	conn.setExpectedCommand(msg.MessageTypeList)
 
-	c := newClient(42, conn)
+	c := NewClient(42, conn)
 	message, _ := c.NextMessage()
 
-	assert.Equal(t, MessageTypeList, message.Command())
+	assert.Equal(t, msg.MessageTypeList, message.Command())
 }
 
 func TestNextMessageReturnsRelayMessage(t *testing.T) {
-	conn := new(MockedConnection)
+	body := "foobar 1\nfoobar 2\n\nfoobar 3"
 
-	conn.AddExpectedLine(MessageTypeRelay)
-	conn.AddExpectedLine("100500,42,56")
-	conn.AddExpectedLine("foobar 1")
-	conn.AddExpectedLine("foobar 2")
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("foobar 3")
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("")
+	conn := new(ClientMockedConnection)
 
-	c := newClient(42, conn)
+	conn.setExpectedCommand(fmt.Sprintf("%s\n100500,42,56\n%s", msg.MessageTypeRelay, body))
+
+	c := NewClient(42, conn)
 	message, _ := c.NextMessage()
 
 	assert := assert.New(t)
 
-	assert.Equal(MessageTypeRelay, message.Command())
-	assert.Equal("foobar 1\nfoobar 2\n\nfoobar 3", message.Body())
+	assert.Equal(msg.MessageTypeRelay, message.Command())
+	assert.Equal(body, *message.Body())
 
 	receivers := message.Receivers()
 	assert.Len(receivers, 3)
-	assert.Contains(receivers, int64(42))
-	assert.Contains(receivers, int64(56))
-	assert.Contains(receivers, int64(100500))
+	assert.Contains(receivers, uint64(42))
+	assert.Contains(receivers, uint64(56))
+	assert.Contains(receivers, uint64(100500))
 }
 
 func TestNextMessageReturnsErrorOnInvalidCommand(t *testing.T) {
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 
-	conn.AddExpectedLine("testInvalidCommand")
-	conn.AddExpectedLine("100500,42,56")
-	conn.AddExpectedLine("foobar")
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("")
+	conn.setExpectedCommand("testInvalidCommand\n100500,42,56\nfoobar")
 
-	c := newClient(42, conn)
+	c := NewClient(42, conn)
 	message, err := c.NextMessage()
 
 	assert := assert.New(t)
@@ -94,15 +83,11 @@ func TestNextMessageReturnsErrorOnInvalidCommand(t *testing.T) {
 }
 
 func TestNextMessageReturnsErrorOnInvalidReceivers(t *testing.T) {
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 
-	conn.AddExpectedLine(MessageTypeRelay)
-	conn.AddExpectedLine("100500,4foo2,56")
-	conn.AddExpectedLine("foobar")
-	conn.AddExpectedLine("")
-	conn.AddExpectedLine("")
+	conn.setExpectedCommand(fmt.Sprintf("%s\n100500,4foo2,56\nfoobar", msg.MessageTypeRelay))
 
-	c := newClient(42, conn)
+	c := NewClient(42, conn)
 	message, err := c.NextMessage()
 
 	assert := assert.New(t)
@@ -114,9 +99,9 @@ func TestNextMessageReturnsErrorOnInvalidReceivers(t *testing.T) {
 }
 
 func TestNextMessageReturnsErrorOnReadError(t *testing.T) {
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 
-	c := newClient(42, conn)
+	c := NewClient(42, conn)
 	message, err := c.NextMessage()
 
 	assert := assert.New(t)
@@ -130,51 +115,59 @@ func TestNextMessageReturnsErrorOnReadError(t *testing.T) {
 func TestSendWritesToConnection(t *testing.T) {
 	messages := []string{"testMessage1", "test\nMessage2"}
 
-	conn := new(MockedConnection)
+	conn := new(ClientMockedConnection)
 	conn.On("Write", messages[0]).Return(nil)
 	conn.On("Write", messages[1]).Return(nil)
 
-	c := newClient(42, conn)
-	c.Send(messages[0])
-	c.Send(messages[1])
+	c := NewClient(42, conn)
+	c.Send(&messages[0])
+	c.Send(&messages[1])
 
-	time.Sleep(time.Millisecond) // For stupidity points
 
 	conn.AssertNumberOfCalls(t, "Write", 2)
 	conn.AssertExpectations(t)
-	assert.Len(t, conn.written, 2)
+	assert.Len(t, conn.getWritten(), 2)
 }
 
 /*
  * Mocks
  */
 
-type MockedConnection struct {
+type ClientMockedConnection struct {
 	mock.Mock
-	lines   []string
+	command string
 	written []string
+	lock    sync.Mutex
 }
 
-func (c *MockedConnection) Write(message string) error {
+func (c *ClientMockedConnection) Write(message string) error {
 	args := c.Called(message)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	c.written = append(c.written, message)
 	return args.Error(0)
 }
 
-func (c *MockedConnection) Read() (string, error) {
-	if len(c.lines) > 0 {
-		line := c.lines[0]
-		c.lines = c.lines[1:]
-		return line, nil
+func (c *ClientMockedConnection) Read() (string, error) {
+	if c.command != "" {
+		return c.command, nil
 	}
 
 	return "", errors.New("testConnectionReadError")
 }
 
-func (c *MockedConnection) Close() {
+func (c *ClientMockedConnection) Close() {
 	c.Called()
 }
 
-func (c *MockedConnection) AddExpectedLine(line string) {
-	c.lines = append(c.lines, line+"\n")
+func (c *ClientMockedConnection) setExpectedCommand(command string) {
+	c.command = command
+}
+
+func (c *ClientMockedConnection) getWritten() []string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.written
 }

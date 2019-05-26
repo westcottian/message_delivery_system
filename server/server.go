@@ -1,17 +1,17 @@
 package server
 
 import (
-	"message_delivery_system/utils"
+	_ "message_delivery_system/utils"
 	"message_delivery_system/client"
 	)	
 
 type Server struct {
-	idSequence utils.IdSequenceInterface
+	clientFactory client.ClientFactoryInterface
 	dispatcher client.DispatcherInterface
 }
 
-func NewServer(s utils.IdSequenceInterface, d client.DispatcherInterface) *Server {
-	return &Server{idSequence: s, dispatcher: d}
+func NewServer(f client.ClientFactoryInterface, d client.DispatcherInterface) *Server {
+	return &Server{clientFactory: f, dispatcher: d}
 }
 
 func (s *Server) Serve(connection client.ConnectionInterface) {
@@ -20,6 +20,7 @@ func (s *Server) Serve(connection client.ConnectionInterface) {
 
 	d := s.dispatcher
 	d.Subscribe(client)
+	defer d.Unsubscribe(client)
 
 	for {
 		message, err := client.NextMessage()
@@ -28,17 +29,12 @@ func (s *Server) Serve(connection client.ConnectionInterface) {
 		case err == nil:
 			d.Dispatch(message)
 		case err.ConnectionError():
-			d.Unsubscribe(client)
 			return
 			// case err.InvalidMessage(): // Just continue
 		}
 	}
 }
 
-func (s *Server) getNextId() int64 {
-	return s.idSequence.NextId()
-}
-
 func (s *Server) createClient(connection client.ConnectionInterface) client.ClientInterface {
-	return client.NewClient(s.getNextId(), connection)
+	return s.clientFactory.Create(connection)
 }

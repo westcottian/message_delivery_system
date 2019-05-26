@@ -4,21 +4,21 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"flag"
 	"message_delivery_system/client"
 //	msg "message_delivery_system/message"
 	"message_delivery_system/utils"
 	"message_delivery_system/server"
 	)
 
-const serverPort = 8888
-
 func main() {
 	listener := createListener()
 	defer listener.Close()
 
 	sequence := utils.NewIdSequence()
-	dispatcher := client.NewDispather()
-	server := server.NewServer(sequence, dispatcher)
+    	clientFactory := client.NewClientFactory(sequence)
+	dispatcher := client.NewDispatcher()
+	server := server.NewServer(clientFactory, dispatcher)
 	acceptConnections(server, listener)
 }
 
@@ -36,7 +36,7 @@ func acceptConnections(server *server.Server, listener *net.TCPListener) {
 
 func createListener() *net.TCPListener {
 	ip := net.IPv4(127, 0, 0, 1)
-	addr := &net.TCPAddr{Port: serverPort, IP: ip}
+	addr := &net.TCPAddr{Port: getPort(), IP: ip}
 	listener, err := net.ListenTCP("tcp", addr)
 
 	if err != nil {
@@ -45,4 +45,11 @@ func createListener() *net.TCPListener {
 	}
 
 	return listener
+}
+
+func getPort() int {
+	port := flag.Int("port", 8888, "Port to listen")
+	flag.Parse()
+
+	return *port
 }

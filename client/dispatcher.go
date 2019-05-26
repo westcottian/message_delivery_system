@@ -14,12 +14,12 @@ type DispatcherInterface interface {
 }
 
 type Dispatcher struct {
-	clients      map[int64]ClientInterface
+	clients      map[uint64]ClientInterface
 	clientsMutex sync.Mutex
 }
 
-func NewDispather() *Dispatcher {
-	return &Dispatcher{clients: make(map[int64]ClientInterface)}
+func NewDispatcher() *Dispatcher {
+	return &Dispatcher{clients: make(map[uint64]ClientInterface)}
 }
 
 func (d *Dispatcher) Dispatch(message msg.MessageInterface) {
@@ -34,11 +34,12 @@ func (d *Dispatcher) Dispatch(message msg.MessageInterface) {
 
 }
 
-func (d *Dispatcher) identify(sender int64) {
-	d.sendBody(sender, fmt.Sprintf("[Server] Your ID is %d", sender))
+func (d *Dispatcher) identify(sender uint64) {
+	body := fmt.Sprintf("[Server] Your ID is %d\n", sender)
+	d.sendBody(sender, &body)
 }
 
-func (d *Dispatcher) list(sender int64) {
+func (d *Dispatcher) list(sender uint64) {
 	var clientList []string
 
 	d.lockClients()
@@ -49,7 +50,8 @@ func (d *Dispatcher) list(sender int64) {
 	}
 	d.unlockClients()
 
-	d.sendBody(sender, fmt.Sprintf("[Server] Client IDs are %s", strings.Join(clientList, ", ")))
+	body := fmt.Sprintf("[Server] Client IDs are %s\n", strings.Join(clientList, ", "))
+	d.sendBody(sender, &body)
 }
 
 func (d *Dispatcher) relay(message msg.MessageInterface) {
@@ -60,29 +62,31 @@ func (d *Dispatcher) relay(message msg.MessageInterface) {
 
 func (d *Dispatcher) Subscribe(c ClientInterface) {
 	d.lockClients()
+	defer d.unlockClients()
+
 	d.clients[c.Id()] = c
-	d.unlockClients()
 }
 
 func (d *Dispatcher) Unsubscribe(c ClientInterface) {
 	d.lockClients()
+	defer d.unlockClients()
+
 	delete(d.clients, c.Id())
-	d.unlockClients()
 }
 
-func (d *Dispatcher) sendBody(receiver int64, body string) {
+func (d *Dispatcher) sendBody(receiver uint64, body *string) {
 	client := d.client(receiver)
 
 	if client != nil {
-		client.Send(body + "\n\n")
+		client.Send(body)
 	}
 }
 
-func (d *Dispatcher) client(id int64) ClientInterface {
+func (d *Dispatcher) client(id uint64) ClientInterface {
 	d.lockClients()
-	client := d.clients[id]
-	d.unlockClients()
-	return client
+	defer d.unlockClients()
+
+	return d.clients[id]
 }
 
 func (d *Dispatcher) lockClients() {
