@@ -30,7 +30,6 @@ func (s *Server) Serve(connection client.ConnectionInterface) {
 			d.Dispatch(message)
 		case err.ConnectionError():
 			return
-			// case err.InvalidMessage(): // Just continue
 		}
 	}
 }

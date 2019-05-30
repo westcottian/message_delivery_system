@@ -100,6 +100,7 @@ func newServableMockedClient(expectedMessages []msg.MessageInterface, invalidCom
 	return &ServableMockedClient{messages: expectedMessages, invalidCommandAt: invalidCommandAt}
 }
 
+
 func (c *ServableMockedClient) Id() uint64 {
 	return 42 // Irrelevant
 }

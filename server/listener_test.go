@@ -6,141 +6,134 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
+	"sync"
 	msg "message_delivery_system/message"
 )
 
 func TestListsAndIdentities(t *testing.T) {
-	port := 1234
+        port := 1234
 
-	l := NewListener(port)
-	go l.Listen()
+        l := NewListener(port)
+        go l.Listen()
 
-	input1, output1 := getHelperClient(port)
-	input2, output2 := getHelperClient(port)
-	input3, output3 := getHelperClient(port)
+        var wg sync.WaitGroup
 
-	input1 <- msg.MessageTypeIdentity
+        input1, output1 := getHelperClient(port)
+        input2, output2 := getHelperClient(port)
+        input3, output3 := getHelperClient(port)
 
-	input2 <- msg.MessageTypeList
-	input2 <- msg.MessageTypeList
+        input1 <- msg.MessageTypeIdentity
 
-	input3 <- msg.MessageTypeList
-	input3 <- msg.MessageTypeIdentity
-	input3 <- msg.MessageTypeIdentity
+        input2 <- msg.MessageTypeList
+        input2 <- msg.MessageTypeList
 
-	assert := assert.New(t)
-	finished := make(chan int, 3) // 3 Clients
+        input3 <- msg.MessageTypeList
+        input3 <- msg.MessageTypeIdentity
+        input3 <- msg.MessageTypeIdentity
 
-	go func() {
-		r := <-output1
-		//fmt.Printf("RESULT: c1: '%s' -----c1-----\n", r)
-		assert.Contains(r, "Your ID is 1")
-		finished <- 1
-	}()
+        assert := assert.New(t)
 
-	go func() {
-		r := <-output2
-		//fmt.Printf("RESULT: c2: '%s' -----c2-----\n", r)
-		assert.Contains(r, "Client IDs are")
-		assert.Contains(r, "1")
-		assert.NotContains(r, "2")
-		assert.Contains(r, "3")
+        wg.Add(3)
 
-		r = <-output2
-		//fmt.Printf("RESULT: c2: '%s' -----c2-----\n", r)
-		assert.Contains(r, "Client IDs are")
-		assert.Contains(r, "1")
-		assert.NotContains(r, "2")
-		assert.Contains(r, "3")
+        go func() {
+                defer wg.Done()
+                r := <-output1
+                assert.Contains(r, "Your ID is 2")
+        }()
+ 	go func() {
+                defer wg.Done()
+                r := <-output2
+                assert.Contains(r, "Client IDs are")
+                assert.Contains(r, "1")
+                assert.NotContains(r, "3")
+                assert.Contains(r, "2")
 
-		finished <- 2
-	}()
+                r = <-output2
+                assert.Contains(r, "Client IDs are")
+                assert.Contains(r, "1")
+                assert.NotContains(r, "3")
+                assert.Contains(r, "2")
 
-	go func() {
-		r := <-output3
-		//fmt.Printf("RESULT: c3: '%s' -----c3-----\n", r)
-		assert.Contains(r, "Client IDs are")
-		assert.Contains(r, "1")
-		assert.Contains(r, "2")
-		assert.NotContains(r, "3")
+        }()
 
-		r = <-output3
-		//fmt.Printf("RESULT: c3: '%s' -----c3-----\n", r)
-		assert.Contains(r, "Your ID is 3")
+        go func() {
+                defer wg.Done()
+                r := <-output3
+                assert.Contains(r, "Client IDs are")
+                assert.NotContains(r, "1")
 
-		r = <-output3
-		//fmt.Printf("RESULT: c3: '%s' -----c3-----\n", r)
-		assert.Contains(r, "Your ID is 3")
+                r = <-output3
+                assert.Contains(r, "Your ID is 1")
 
-		finished <- 3
-	}()
+                r = <-output3
+                assert.Contains(r, "Your ID is 1")
 
-	<-finished
-	<-finished
-	<-finished
-}
+        }()
+
+        wg.Wait()
+
+}	
 
 func TestRelays(t *testing.T) {
-	port := 1235
+        port := 1235
 
-	l := NewListener(port)
-	go l.Listen()
+        l := NewListener(port)
+        go l.Listen()
 
-	input1, output1 := getHelperClient(port)
-	input2, output2 := getHelperClient(port)
-	input3, output3 := getHelperClient(port)
+        var wg sync.WaitGroup
 
-	body1 := "test message 1"
-	body2 := "test END message 2\numad?"
-	body3 := "test message 3\n\nEND"
+        in1, out1 := getHelperClient(port)
+        in2, out2 := getHelperClient(port)
+        in3, out3 := getHelperClient(port)
 
-	message1 := fmt.Sprintf("%s\n3\n%s", msg.MessageTypeRelay, body1)
-	message2 := fmt.Sprintf("%s\n2,1\n%s", msg.MessageTypeRelay, body2)
-	message3 := fmt.Sprintf("%s\ninvalid receivers\nignored body", msg.MessageTypeRelay)
-	message4 := fmt.Sprintf("invalid type\n1\nignored body")
-	message5 := fmt.Sprintf("%s\n1,100500\n%s", msg.MessageTypeRelay, body3)
+        body1 := "test message 1"
+        body2 := "test END message 2\numad?"
+        body3 := "test message 3\n\nEND"
 
-	input1 <- message1
-	input3 <- message2
-	input1 <- message3
-	input2 <- message4
-	input3 <- message5
+        message1 := fmt.Sprintf("%s\n3\n%s", msg.MessageTypeRelay, body1)
+        message2 := fmt.Sprintf("%s\n2,1\n%s", msg.MessageTypeRelay, body2)
+        message3 := fmt.Sprintf("%s\ninvalid receivers\nignored body", msg.MessageTypeRelay)
+        message4 := fmt.Sprintf("invalid type\n1\nignored body")
+        message5 := fmt.Sprintf("%s\n1,100500\n%s", msg.MessageTypeRelay, body3)
 
-	assert := assert.New(t)
-	finished := make(chan int, 3) // 3 Clients
+	in1 <- message1
+        in1 <- message3
+
+        in2 <- message4
+
+        in3 <- message2
+        in3 <- message5
+	
+        assert := assert.New(t)
+
+        wg.Add(1)
 
 	go func() {
-		r := <-output1
-		//fmt.Printf("RESULT: c1: '%s' -----c1-----\n", r)
-		assert.Contains(r, body2)
+                defer wg.Done()
+                r := <-out1
+                assert.Contains(r, body2)
 
-		r = <-output1
-		//fmt.Printf("RESULT: c1: '%s' -----c1-----\n", r)
+        }()
+ 
+
+        go func() {
+                defer wg.Done()
+                r := <-out2
+                assert.Contains(r, body1)
+        }()
+
+        go func() {
+                defer wg.Done()
+                r := <-out3
+                assert.Contains(r, body2)
+
+		r = <-out3
 		assert.Contains(r, body3)
+        }()
 
-		finished <- 1
-	}()
-
-	go func() {
-		r := <-output2
-		//fmt.Printf("RESULT: c2: '%s' -----c2-----\n", r)
-		assert.Contains(r, body2)
-
-		finished <- 2
-	}()
-
-	go func() {
-		r := <-output3
-		//fmt.Printf("RESULT: c3: '%s' -----c3-----\n", r)
-		assert.Contains(r, body1)
-
-		finished <- 3
-	}()
-
-	<-finished
-	<-finished
-	<-finished
+        wg.Wait()		
 }
+
 
 /*
  * Helpers
@@ -149,23 +142,31 @@ func TestRelays(t *testing.T) {
 func getHelperClient(port int) (chan string, chan string) {
 	input := make(chan string, 255)
 	output := make(chan string, 255)
-
-	bytes := make([]byte, 100500)
+	
+	bytes := make([]byte, 1024)
 	var len int
-
 	go func() {
-		c, _ := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
-		reader := bufio.NewReader(c)
+		c, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+		if err != nil {
+                 fmt.Println(err)
+                 return 
+                }
+		defer c.Close()
+		//reader := bufio.NewReader(c)
 		for {
+			reader := bufio.NewReader(c)
 			// Sending
 			m := <-input
-			fmt.Fprint(c, m+"\n")
-
+			fmt.Fprintf(c, m+"\n")
 			// Reading response
-			len, _ = reader.Read(bytes)
+			len, err = reader.Read(bytes)
+			if err != nil {
+                		 fmt.Println(err)
+                 		return
+                	}	
 			output <- string(bytes[:len])
 		}
 	}()
-
 	return input, output
 }
+

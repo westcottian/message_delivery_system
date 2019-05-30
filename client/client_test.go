@@ -122,7 +122,19 @@ func TestSendWritesToConnection(t *testing.T) {
 	c := NewClient(42, conn)
 	c.Send(&messages[0])
 	c.Send(&messages[1])
+	
+	var wg sync.WaitGroup
+	wg.Add(1)
 
+	go func() {
+		defer wg.Done()
+		written := conn.getWritten()
+		for len(written) != 2 {
+			written = conn.getWritten()
+		}
+	}()
+	
+	wg.Wait()
 
 	conn.AssertNumberOfCalls(t, "Write", 2)
 	conn.AssertExpectations(t)
