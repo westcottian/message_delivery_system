@@ -6,12 +6,14 @@ import (
 	"os"
 	"flag"
 	"message_delivery_system/client"
-//	msg "message_delivery_system/message"
 	"message_delivery_system/utils"
 	"message_delivery_system/server"
+	"github.com/pkg/profile"
 	)
 
 func main() {
+	// Memory profiling
+	defer profile.Start(profile.MemProfile).Stop()
 	listener := createListener()
 	defer listener.Close()
 

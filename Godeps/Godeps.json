@@ -2,5 +2,39 @@
 	"ImportPath": "message_delivery_system",
 	"GoVersion": "go1.12",
 	"GodepVersion": "v80",
-	"Deps": []
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/davecgh/go-spew/spew",
+			"Comment": "v1.1.1-1-gd8f796a",
+			"Rev": "d8f796af33cc11cb798c1aaeb27a4ebc5099927d"
+		},
+		{
+			"ImportPath": "github.com/pkg/profile",
+			"Comment": "v1.3.0",
+			"Rev": "f6fe06335df110bcf1ed6d4e852b760bfc15beee"
+		},
+		{
+			"ImportPath": "github.com/pmezard/go-difflib/difflib",
+			"Comment": "v1.0.0-4-g5d4384e",
+			"Rev": "5d4384ee4fb2527b0a1256a821ebfc92f91efefc"
+		},
+		{
+			"ImportPath": "github.com/stretchr/objx",
+			"Comment": "v0.2.0-3-g35313a9",
+			"Rev": "35313a95ee26395aa17d366c71a2ccf788fa69b6"
+		},
+		{
+			"ImportPath": "github.com/stretchr/testify/assert",
+			"Comment": "v1.3.0-12-g34c6fa2",
+			"Rev": "34c6fa2dc70986bccbbffcc6130f6920a924b075"
+		},
+		{
+			"ImportPath": "github.com/stretchr/testify/mock",
+			"Comment": "v1.3.0-12-g34c6fa2",
+			"Rev": "34c6fa2dc70986bccbbffcc6130f6920a924b075"
+		}
+	]
 }
