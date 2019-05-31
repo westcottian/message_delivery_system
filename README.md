@@ -93,3 +93,9 @@ Relay message format:
 Run the test script to run all the tests and benchmarks
 
 ```sh runtestandcodecoverage.sh```
+
+Individual test cases can be run by going in each component and running below command
+	go test -v
+	
+eg: cd message/
+    go test -v
